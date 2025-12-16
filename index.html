@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Paint the Tiles</title>
+  <style>
+    :root { --gap: 8px; --tile: 60px; }
+
+    html, body { height: 100%; margin: 0; }
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; display: flex; flex-direction: column; }
+
+    header {
+      padding: 14px 16px;
+      display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+      border-bottom: 1px solid #e6e6e6;
+    }
+    main { flex: 1; display: grid; place-items: center; padding: 12px; min-height: 0; }
+
+    #board { display: grid; gap: var(--gap); user-select: none; outline: none; }
+
+    .cell {
+      width: var(--tile); height: var(--tile);
+      border: 1px solid #c9c9c9; background: white;
+      display: grid; place-items: center;
+      position: relative; box-sizing: border-box; border-radius: 10px;
+    }
+    .cell.black { background: #111; }
+    .cell.current { outline: 4px solid #2b6cff; }
+
+    .start-icon {
+      position: absolute;
+      top: 6px; left: 6px;
+      width: calc(var(--tile) * 0.28);
+      height: calc(var(--tile) * 0.28);
+      pointer-events: none;
+    }
+    .start-icon path { fill: none; stroke: #111; stroke-width: 2.2; }
+    .cell.black .start-icon path { stroke: #fff; } /* visible on black */
+
+    .arrows {
+      font-size: calc(var(--tile) * 0.32);
+      line-height: 1;
+      color: rgba(20,20,20,0.85);
+      letter-spacing: 6px;
+      text-align: center;
+      padding-left: 6px;
+    }
+    .cell.black .arrows { color: rgba(255,255,255,0.9); }
+
+    button, select { padding: 8px 10px; }
+    .hint { color: #444; font-size: 14px; }
+    .pill { display: inline-block; padding: 2px 8px; border: 1px solid #ddd; border-radius: 999px; }
+  </style>
+</head>
+
+<body>
+  <header>
+    <label>
+      Grid:
+      <select id="sizeSelect">
+        <option value="3">3 × 3</option>
+        <option value="5">5 × 5</option>
+      </select>
+    </label>
+
+    <button id="startBtn">Start</button>
+    <button id="resetBtn" disabled>Reset</button>
+
+    <span class="hint">
+      <span class="pill">S</span> start,
+      <span class="pill">Arrow</span> move,
+      <span class="pill">Space</span> paint,
+      <span class="pill">R</span> reset
+    </span>
+  </header>
+
+  <main>
+    <div id="board" tabindex="0" aria-label="grid board"></div>
+  </main>
+
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  const boardEl = document.getElementById("board");
+  const sizeSelect = document.getElementById("sizeSelect");
+  const startBtn = document.getElementById("startBtn");
+  const resetBtn = document.getElementById("resetBtn");
+
+  let size = Number(sizeSelect.value);
+  let cells = [];
+  let painted = [];
+  let pos = { r: 0, c: 0 };
+  let started = false;
+
+  const GAP = 8;
+
+  function inBounds(r, c) { return r >= 0 && r < size && c >= 0 && c < size; }
+
+  function arrowsFor(r, c) {
+    const up = inBounds(r - 1, c) ? "↑" : "";
+    const left = inBounds(r, c - 1) ? "←" : "";
+    const right = inBounds(r, c + 1) ? "→" : "";
+    const down = inBounds(r + 1, c) ? "↓" : "";
+    return [up, left, right, down].filter(Boolean).join(" ");
+  }
+
+  function calcTileSize() {
+    const headerH = document.querySelector("header").getBoundingClientRect().height;
+    const pad = 24;
+    const vw = window.innerWidth - pad;
+    const vh = window.innerHeight - headerH - pad;
+
+    const maxW = (vw - GAP * (size - 1)) / size;
+    const maxH = (vh - GAP * (size - 1)) / size;
+
+    const tile = Math.max(30, Math.floor(Math.min(maxW, maxH)));
+    document.documentElement.style.setProperty("--tile", tile + "px");
+    document.documentElement.style.setProperty("--gap", GAP + "px");
+  }
+
+  function createStarIcon() {
+    // outline star SVG (no fill)
+    const svgNS = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(svgNS, "svg");
+    svg.setAttribute("viewBox", "0 0 24 24");
+    svg.classList.add("start-icon");
+
+    const path = document.createElementNS(svgNS, "path");
+    // classic star outline path
+    path.setAttribute("d", "M12 2.5l2.9 6 6.6.9-4.8 4.6 1.2 6.6L12 17.9 6.1 20.6l1.2-6.6-4.8-4.6 6.6-.9L12 2.5z");
+    svg.appendChild(path);
+    return svg;
+  }
+
+  function buildBoard(n) {
+    size = n;
+    cells = [];
+    painted = Array.from({ length: size }, () => Array(size).fill(false));
+    pos = { r: 0, c: 0 };
+
+    calcTileSize();
+
+    boardEl.innerHTML = "";
+    boardEl.style.gridTemplateColumns = `repeat(${size}, var(--tile))`;
+
+    for (let r = 0; r < size; r++) {
+      const row = [];
+      for (let c = 0; c < size; c++) {
+        const cell = document.createElement("div");
+        cell.className = "cell";
+        cell.dataset.r = String(r);
+        cell.dataset.c = String(c);
+
+        if (r === 0 && c === 0) {
+          cell.appendChild(createStarIcon());
+        }
+
+        const arrows = document.createElement("div");
+        arrows.className = "arrows";
+        cell.appendChild(arrows);
+
+        row.push(cell);
+        boardEl.appendChild(cell);
+      }
+      cells.push(row);
+    }
+    render();
+  }
+
+  function render() {
+    for (let r = 0; r < size; r++) {
+      for (let c = 0; c < size; c++) {
+        const cell = cells[r][c];
+        cell.classList.toggle("black", painted[r][c]);
+        cell.classList.toggle("current", r === pos.r && c === pos.c);
+
+        const arrowsEl = cell.querySelector(".arrows");
+        arrowsEl.textContent = (r === pos.r && c === pos.c) ? arrowsFor(r, c) : "";
+      }
+    }
+  }
+
+  function move(dr, dc) {
+    const nr = pos.r + dr, nc = pos.c + dc;
+    if (!inBounds(nr, nc)) return;
+    pos = { r: nr, c: nc };
+    render();
+  }
+
+  function togglePaint() {
+    painted[pos.r][pos.c] = !painted[pos.r][pos.c];
+    render();
+  }
+
+  function reset() {
+    painted = Array.from({ length: size }, () => Array(size).fill(false));
+    pos = { r: 0, c: 0 };
+    render();
+  }
+
+  function startGame() {
+    started = true;
+    resetBtn.disabled = false;
+    buildBoard(Number(sizeSelect.value));
+    boardEl.focus();
+  }
+
+  window.addEventListener("keydown", (e) => {
+    // change grid size anytime
+    if (e.key === "3" || e.key === "5") {
+      e.preventDefault();
+      const newSize = Number(e.key);
+      sizeSelect.value = newSize;
+      buildBoard(newSize);
+      if (started) boardEl.focus();
+      return;
+    }
+
+    // start game with S
+    if (!started && (e.key === "s" || e.key === "S")) {
+      e.preventDefault();
+      startGame();
+      return;
+    }
+
+    if (!started) return;
+
+    if (["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"," "].includes(e.key)) {
+      e.preventDefault();
+    }
+
+    switch (e.key) {
+      case "ArrowUp": move(-1, 0); break;
+      case "ArrowDown": move(1, 0); break;
+      case "ArrowLeft": move(0, -1); break;
+      case "ArrowRight": move(0, 1); break;
+      case " ": togglePaint(); break;
+      case "r":
+      case "R": reset(); break;
+    }
+  });
+
+  boardEl.addEventListener("click", () => boardEl.focus());
+
+  startBtn.addEventListener("click", startGame);
+
+  resetBtn.addEventListener("click", () => {
+    if (!started) return;
+    reset();
+    boardEl.focus();
+  });
+
+  sizeSelect.addEventListener("change", () => {
+    buildBoard(Number(sizeSelect.value));
+    if (started) boardEl.focus();
+  });
+
+  window.addEventListener("resize", () => calcTileSize());
+
+  // initial preview
+  buildBoard(size);
+});
+</script>
+</body>
+</html>
