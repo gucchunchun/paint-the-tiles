@@ -64,11 +64,9 @@
       </select>
     </label>
 
-    <button id="startBtn">Start</button>
-    <button id="resetBtn" disabled>Reset</button>
+    <button id="resetBtn">Reset</button>
 
     <span class="hint">
-      <span class="pill">S</span> start,
       <span class="pill">Arrow</span> move,
       <span class="pill">Space</span> paint,
       <span class="pill">R</span> reset
@@ -83,14 +81,12 @@
 document.addEventListener("DOMContentLoaded", () => {
   const boardEl = document.getElementById("board");
   const sizeSelect = document.getElementById("sizeSelect");
-  const startBtn = document.getElementById("startBtn");
   const resetBtn = document.getElementById("resetBtn");
 
   let size = Number(sizeSelect.value);
   let cells = [];
   let painted = [];
   let pos = { r: 0, c: 0 };
-  let started = false;
 
   const GAP = 8;
 
@@ -198,32 +194,16 @@ document.addEventListener("DOMContentLoaded", () => {
     render();
   }
 
-  function startGame() {
-    started = true;
-    resetBtn.disabled = false;
-    buildBoard(Number(sizeSelect.value));
-    boardEl.focus();
-  }
-
   window.addEventListener("keydown", (e) => {
-    // change grid size anytime
+    // grid size change
     if (e.key === "3" || e.key === "5") {
       e.preventDefault();
       const newSize = Number(e.key);
       sizeSelect.value = newSize;
       buildBoard(newSize);
-      if (started) boardEl.focus();
+      boardEl.focus();
       return;
     }
-
-    // start game with S
-    if (!started && (e.key === "s" || e.key === "S")) {
-      e.preventDefault();
-      startGame();
-      return;
-    }
-
-    if (!started) return;
 
     if (["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"," "].includes(e.key)) {
       e.preventDefault();
@@ -242,17 +222,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
   boardEl.addEventListener("click", () => boardEl.focus());
 
-  startBtn.addEventListener("click", startGame);
-
   resetBtn.addEventListener("click", () => {
-    if (!started) return;
     reset();
     boardEl.focus();
   });
 
   sizeSelect.addEventListener("change", () => {
     buildBoard(Number(sizeSelect.value));
-    if (started) boardEl.focus();
+    boardEl.focus();
   });
 
   window.addEventListener("resize", () => calcTileSize());
